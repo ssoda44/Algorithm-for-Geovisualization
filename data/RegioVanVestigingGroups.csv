@@ -1,0 +1,30 @@
+Id;Index;Title;Description;ParentId;DimensionId
+NL;0;Nederland;;;RegioVanVestiging
+LD;1;Landsdelen;;;RegioVanVestiging
+PV;2;Provincies;;;RegioVanVestiging
+CRPV;3;COROP gebieden per provincie;;;RegioVanVestiging
+CRPV20;4;Groningen (PV);;CRPV;RegioVanVestiging
+CRPV21;5;Fryslân (PV);;CRPV;RegioVanVestiging
+CRPV22;6;Drenthe (PV);;CRPV;RegioVanVestiging
+CRPV23;7;Overijssel (PV);;CRPV;RegioVanVestiging
+CRPV24;8;Flevoland (PV);;CRPV;RegioVanVestiging
+CRPV25;9;Gelderland (PV);;CRPV;RegioVanVestiging
+CRPV26;10;Utrecht (PV);;CRPV;RegioVanVestiging
+CRPV27;11;Noord-Holland (PV);;CRPV;RegioVanVestiging
+CRPV28;12;Zuid-Holland (PV);;CRPV;RegioVanVestiging
+CRPV29;13;Zeeland (PV);;CRPV;RegioVanVestiging
+CRPV30;14;Noord-Brabant (PV);;CRPV;RegioVanVestiging
+CRPV31;15;Limburg (PV);;CRPV;RegioVanVestiging
+GMPV;16;Gemeenten per provincie;;;RegioVanVestiging
+GMPV20;17;Groningen (PV);;GMPV;RegioVanVestiging
+GMPV21;18;Fryslân (PV);;GMPV;RegioVanVestiging
+GMPV22;19;Drenthe (PV);;GMPV;RegioVanVestiging
+GMPV23;20;Overijssel (PV);;GMPV;RegioVanVestiging
+GMPV24;21;Flevoland (PV);;GMPV;RegioVanVestiging
+GMPV25;22;Gelderland (PV);;GMPV;RegioVanVestiging
+GMPV26;23;Utrecht (PV);;GMPV;RegioVanVestiging
+GMPV27;24;Noord-Holland (PV);;GMPV;RegioVanVestiging
+GMPV28;25;Zuid-Holland (PV);;GMPV;RegioVanVestiging
+GMPV29;26;Zeeland (PV);;GMPV;RegioVanVestiging
+GMPV30;27;Noord-Brabant (PV);;GMPV;RegioVanVestiging
+GMPV31;28;Limburg (PV);;GMPV;RegioVanVestiging

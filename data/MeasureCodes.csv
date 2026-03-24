@@ -1,0 +1,6 @@
+Identifier;MeasureGroupId;Index;Title;Description;DataType;Unit;Decimals;PresentationType
+M000171;;3;Tussen gemeenten verhuisde personen;"Tussen gemeenten verhuisde persoon:
+Persoon die verhuist waarbij het oude en het nieuwe adres in verschillende gemeenten liggen. 
+Wijzigingen van adres door grenswijzigingen tussen gemeenten of door gemeentelijke herindelingen worden niet als verhuizing beschouwd.
+
+";Long;aantal;0;Absolute

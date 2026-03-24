@@ -1,0 +1,4 @@
+Id;Title;Url;DatasetId;Id;Identifier;Title;Description;Modified;ReleaseDate;ModificationDate;Language;TemporalCoverage;Authority;Catalog;Publisher;ContactPoint;Version;VersionNotes;VersionReason;Frequency;Status;ObservationCount;ObservationsModified;DatasetType;GraphTypes;DatasetIdentifier;DataProviderId;DataProviderId;License;Source;Summary;LongDescription
+0;"Verhuisde personen; binnen gemeenten, tussen gemeenten, regio";https://opendata.cbs.nl/statline/#/CBS/nl/dataset/60048ned;;;;;;01-01-0001 00:00:00;01-01-0001 00:00:00;01-01-0001 00:00:00;;;;;;;;;;;;0;01-01-0001 00:00:00;;;;;;;;;
+0;Gebieden in Nederland;https://opendata.cbs.nl/statline/#/CBS/nl/navigatieScherm/thema?themaNr=4450;;;;;;01-01-0001 00:00:00;01-01-0001 00:00:00;01-01-0001 00:00:00;;;;;;;;;;;;0;01-01-0001 00:00:00;;;;;;;;;
+0;Bevolking;https://www.cbs.nl/nl-nl/maatschappij/bevolking;;;;;;01-01-0001 00:00:00;01-01-0001 00:00:00;01-01-0001 00:00:00;;;;;;;;;;;;0;01-01-0001 00:00:00;;;;;;;;;

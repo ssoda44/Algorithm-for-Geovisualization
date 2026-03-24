@@ -1,0 +1,101 @@
+Identifier;Title;Description;Modified;ReleaseDate;ModificationDate;Language;TemporalCoverage;Authority;Catalog;Publisher;ContactPoint;Version;VersionNotes;VersionReason;Frequency;Status;ObservationCount;ObservationsModified;DatasetType;GraphTypes;License;Source;Summary;LongDescription
+81734NED;Tussen gemeenten verhuisde personen;"Deze tabel bevat cijfers over verhuisde personen tussen gemeenten binnen Nederland onder de bevolking van Nederland.
+
+De volgende uitsplitsingen zijn mogelijk:
+Gemeente van vestiging x gemeente van vertrek.
+
+De in de tabel opgenomen regio's zijn landsdelen, provincies, COROP-gebieden en gemeenten.
+
+De gepresenteerde regiototalen betreffen samentellingen van de gemeentelijke cijfers.
+
+Gegevens beschikbaar: vanaf 2011.
+
+Status van de cijfers:
+Alle in de tabel opgenomen cijfers zijn definitief.
+
+Wijzigingen per 28 juli 2025:
+De definitieve cijfers over 2024 zijn toegevoegd.
+
+Wanneer komen er nieuwe cijfers?
+In het 3e kwartaal van 2026 worden de cijfers over 2025 toegevoegd aan de tabel.
+
+";2025-07-28T00:00:00+02:00;2025-07-28T00:00:00+02:00;2025-07-28T00:00:00+02:00;nl;2011-2024;https://standaarden.overheid.nl/owms/terms/Centraal_Bureau_voor_de_Statistiek;CBS;https://standaarden.overheid.nl/owms/terms/Centraal_Bureau_voor_de_Statistiek;infoservice@cbs.nl;202507280000;;Actualisering;Per jaar;Regulier;3528056;2025-07-28T00:00:00+02:00;Numeric;Table,Bar,Line,Map;https://creativecommons.org/licenses/by/4.0/;CBS.;"Verhuisde personen van gemeente
+naar gemeente";"INHOUDSOPGAVE
+
+1. Toelichting
+2. Definities en verklaring van symbolen
+3. Koppelingen naar relevante tabellen en artikelen
+4. Bronnen en methoden
+5. Meer informatie 
+
+1. TOELICHTING
+
+Deze tabel bevat cijfers over verhuisde personen tussen gemeenten binnen Nederland onder de bevolking van Nederland.
+
+De volgende uitsplitsingen zijn mogelijk:
+Gemeente van vestiging x gemeente van vertrek.
+
+De in de tabel opgenomen regio's zijn landsdelen, provincies, COROP-gebieden en gemeenten.
+
+De gepresenteerde regiototalen betreffen samentellingen van de gemeentelijke cijfers.
+
+Gegevens beschikbaar: vanaf 2011.
+
+Status van de cijfers:
+Alle in de tabel opgenomen cijfers zijn definitief.
+
+Wijzigingen per 28 juli 2025:
+De definitieve cijfers over 2024 zijn toegevoegd.
+
+Wanneer komen er nieuwe cijfers?
+In het 3e kwartaal van 2026 worden de cijfers over 2025 toegevoegd aan de tabel.
+
+2. DEFINITIES EN VERKLARING VAN SYMBOLEN
+
+Definities:
+
+Bevolking
+De bewoners van Nederland.
+In de bevolkingsaantallen zijn uitsluitend personen begrepen die zijn opgenomen in het bevolkingsregister van een Nederlandse gemeente. In principe wordt iedereen die voor onbepaalde tijd in Nederland woont, opgenomen in het bevolkingsregister van de woongemeente. Personen die tot de bevolking van Nederland behoren, maar voor wie geen vaste woonplaats valt aan te wijzen, zijn opgenomen in het bevolkingsregister van de gemeente 's-Gravenhage.
+In de bevolkingsregisters zijn niet opgenomen de in Nederland wonende personen waarvoor uitzonderingsregels gelden met betrekking tot opneming in de bevolkingsregisters (bijvoorbeeld diplomaten en NAVO militairen) en 
+personen die niet legaal in Nederland verblijven.
+
+Tussen gemeenten verhuisde personen
+Personen die verhuizen waarbij het oude en het nieuwe adres in verschillende gemeenten liggen. 
+Wijzigingen van adres door grenswijzigingen tussen gemeenten of door gemeentelijke herindelingen worden niet als verhuizing beschouwd.
+
+Verklaring van symbolen:
+
+niets (blanco)	: het cijfer kan op logische gronden niet voorkomen
+. 		: het cijfer is onbekend, onvoldoende betrouwbaar of geheim
+*		: voorlopige cijfers
+**		: nader voorlopige cijfers
+
+3. KOPPELINGEN NAAR RELEVANTE TABELLEN EN ARTIKELEN
+
+Gegevens over verhuisde personen binnen gemeenten en tussen gemeenten in Nederland naar gezinssituatie ten tijde van de verhuizing, geslacht, leeftijd, burgerlijke staat en Nederlanderschap per regio zijn te vinden in de StatLine tabel <a href='https://opendata.cbs.nl/statline/#/CBS/nl/dataset/60048ned'>Verhuisde personen; binnen gemeenten, tussen gemeenten, regio</a>.
+
+Informatie over gebieden in Nederland is te vinden in <a href='https://opendata.cbs.nl/statline/#/CBS/nl/navigatieScherm/thema?themaNr=4450'>Gebieden in Nederland</a>.
+
+Algemene informatie over de bevolking is te vinden op de themapagina <a href='https://www.cbs.nl/nl-nl/maatschappij/bevolking'>Bevolking</a>.
+
+4. BRONNEN EN METHODEN
+
+Trendbreuk nagekomen berichten
+Vanaf verslagjaar 2010 worden méér nagekomen berichten meegeteld. Voor een beschrijving van nagekomen berichten en de gevolgen voor de cijfers in de tabel zie de Korte onderzoeksbeschrijving Bevolkingsstatistiek. 
+
+De beschrijving van het onderzoek is te vinden bij de Korte onderzoeksbeschrijving <a href='https://www.cbs.nl/nl-nl/onze-diensten/methoden/onderzoeksomschrijvingen/korte-onderzoeksbeschrijvingen/bevolkingsstatistiek'>Bevolkingsstatistiek</a>.
+
+De gegevens in de tabel zijn vanaf 2014 afkomstig uit het <a href='https://www.cbs.nl/nl-nl/onze-diensten/methoden/onderzoeksomschrijvingen/korte-onderzoeksbeschrijvingen/stelsel-van-sociaal-statistische-bestanden--ssb--'>Stelsel van Sociaal-statistische Bestanden (SSB)</a>.
+
+Verwerking grenswijziging Amsterdam en Weesp in 2022
+Per 24 maart 2022 is de gemeente Weesp opgeheven en in zijn geheel overgegaan naar de gemeente Amsterdam. Voor de overzichtelijkheid zijn de cijfers met betrekking tot verhuisde personen in Weesp voor geheel 2022 bij Amsterdam geteld.
+Voor Weesp zijn dus geen gegevens over de verhuisde personen in 2022 beschikbaar.
+De gemeenten Weesp en Amsterdam liggen niet in hetzelfde COROP gebied waardoor de grenswijziging ook betrekking heeft op de COROP gebieden Groot-Amsterdam (CR23) en Het Gooi en Vechtstreek (CR24).
+
+5. MEER INFORMATIE
+
+<a href='https://www.cbs.nl/nl-nl/over-ons/contact/infoservice'>Infoservice</a>
+
+Copyright (c) Centraal Bureau voor de Statistiek, Den Haag/Heerlen 
+Verveelvoudiging is toegestaan, mits het CBS als bron wordt vermeld."

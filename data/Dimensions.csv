@@ -1,0 +1,4 @@
+Identifier;Title;Description;MapYear;ReleasePolicy;Kind;ContainsGroups;ContainsCodes;CodesUrl;GroupsUrl
+RegioVanVestiging;Regio van vestiging;De gepresenteerde regiototalen betreffen samentellingen van de gemeentelijke cijfers. In de regiototalen zijn dus zowel de tussen gemeenten verhuisde personen uit gemeenten van andere regio's als van gemeenten binnen de eigen regio meegeteld. ;;;GeoDimension;True;True;RegioVanVestigingCodes.csv;RegioVanVestigingGroups.csv
+RegioVanVertrek;Regio van vertrek;De gepresenteerde regiototalen betreffen samentellingen van de gemeentelijke cijfers. In de regiototalen zijn dus zowel de tussen gemeenten verhuisde personen naar gemeenten in andere regio's als van gemeenten binnen de eigen regio meegeteld. ;2016;;GeoDimension;True;True;RegioVanVertrekCodes.csv;RegioVanVertrekGroups.csv
+Perioden;Perioden;;;False;TimeDimension;True;True;PeriodenCodes.csv;PeriodenGroups.csv

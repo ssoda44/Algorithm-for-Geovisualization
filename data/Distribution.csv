@@ -1,0 +1,3 @@
+Format;MediaType;DownloadUrl;AccessUrl;Language
+csv;csv;https://datasets.cbs.nl/csv/CBS/nl/81734NED;https://dataportal.cbs.nl/detail/CBS/81734NED;nl
+odata;odata;https://datasets.cbs.nl/odata/v1/CBS/81734NED;https://dataportal.cbs.nl/detail/CBS/81734NED;nl
