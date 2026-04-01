@@ -8,6 +8,8 @@
 #     "numpy",
 #     "shapely",
 #     "pyproj",
+#     "scipy",
+#     "networkx",
 # ]
 # ///
 
@@ -461,6 +463,170 @@ def _(IMG, gro_muni_flows, gro_munis, mo, plt):
     _fig.savefig(IMG / "06_groningen_munis_net.png", dpi=150, bbox_inches="tight")
 
     mo.md("## Groningen net municipality flows\nArrows show dominant migration direction.")
+    return
+
+
+@app.cell
+def _(mo, province_flows):
+    # Find the source with the highest total outflow
+    _outflows = province_flows.groupby("origin")["flow"].sum().sort_values(ascending=False)
+    mo.md(
+        "## Single-source flow tree\n"
+        "### Total outflow by province\n"
+        + "\n".join(f"- **{code}**: {val:,.0f}" for code, val in _outflows.items())
+    )
+    return
+
+
+@app.cell
+def _(np, province_flows, provinces):
+    import networkx as nx
+    from scipy.spatial import Delaunay
+
+    # Pick source: highest total outflow
+    source_code = province_flows.groupby("origin")["flow"].sum().idxmax()
+
+    # Build centroid lookup
+    centroids = {}
+    for _, row in provinces.iterrows():
+        c = row.geometry.centroid
+        centroids[row["code"]] = np.array([c.x, c.y])
+
+    # All province codes that appear in the flow data
+    all_codes = sorted(centroids.keys())
+
+    # Get flows from this source to all destinations
+    source_flows = province_flows[province_flows["origin"] == source_code].set_index("destination")["flow"].to_dict()
+
+    # Build complete graph on province centroids, weighted by Euclidean distance
+    G = nx.Graph()
+    for code in all_codes:
+        G.add_node(code, pos=centroids[code])
+    for i, c1 in enumerate(all_codes):
+        for c2 in all_codes[i+1:]:
+            dist = np.linalg.norm(centroids[c1] - centroids[c2])
+            G.add_edge(c1, c2, weight=dist)
+
+    # MST
+    mst = nx.minimum_spanning_tree(G)
+
+    # Root the MST at the source — get parent/children via BFS
+    tree_edges = list(nx.bfs_edges(mst, source_code))
+    children = {code: [] for code in all_codes}
+    parent = {}
+    for u, v in tree_edges:
+        children[u].append(v)
+        parent[v] = u
+
+    # Compute subtree flow for each edge (sum of flows to all descendants)
+    def subtree_flow(node):
+        """Return total flow from source to this node and all its descendants."""
+        total = source_flows.get(node, 0)
+        for child in children[node]:
+            total += subtree_flow(child)
+        return total
+
+    edge_flows = {}
+    for u, v in tree_edges:
+        edge_flows[(u, v)] = subtree_flow(v)
+
+    return source_code, centroids, all_codes, source_flows, mst, tree_edges, children, edge_flows
+
+
+@app.cell
+def _(IMG, centroids, edge_flows, mst, np, plt, province_flows, provinces, source_code, source_flows, tree_edges):
+    _names = provinces.set_index("code")["name"].to_dict()
+
+    _fig, (_ax1, _ax2) = plt.subplots(1, 2, figsize=(20, 12))
+
+    # --- Left: naive straight-line flows from source ---
+    provinces.plot(ax=_ax1, edgecolor="black", facecolor="#f0f0f0", linewidth=0.8)
+
+    _max_flow = max(source_flows.values()) if source_flows else 1
+    _sc = centroids[source_code]
+    for _dest, _fl in source_flows.items():
+        _dc = centroids.get(_dest)
+        if _dc is None:
+            continue
+        _w = 1 + 6 * (_fl / _max_flow)
+        _a = 0.4 + 0.6 * (_fl / _max_flow)
+        _ax1.annotate(
+            "",
+            xy=(_dc[0], _dc[1]),
+            xytext=(_sc[0], _sc[1]),
+            arrowprops=dict(
+                arrowstyle="-|>",
+                color="steelblue",
+                lw=_w,
+                alpha=_a,
+                mutation_scale=10 + 10 * (_fl / _max_flow),
+            ),
+        )
+
+    for _code, _pos in centroids.items():
+        _style = dict(boxstyle="round,pad=0.3", fc="gold", ec="black", alpha=0.9) if _code == source_code else dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.9)
+        _ax1.annotate(
+            _names.get(_code, _code),
+            xy=(_pos[0], _pos[1]),
+            ha="center", va="center", fontsize=7, fontweight="bold",
+            bbox=_style,
+        )
+
+    _ax1.set_title(f"Naive: straight-line flows from {_names.get(source_code, source_code)}", fontsize=11)
+    _ax1.set_axis_off()
+
+    # --- Right: MST-routed flow tree ---
+    provinces.plot(ax=_ax2, edgecolor="black", facecolor="#f0f0f0", linewidth=0.8)
+
+    _max_tree_flow = max(edge_flows.values()) if edge_flows else 1
+    for (_u, _v), _fl in edge_flows.items():
+        _uc, _vc = centroids[_u], centroids[_v]
+        _w = 1 + 8 * (_fl / _max_tree_flow)
+        _a = 0.5 + 0.5 * (_fl / _max_tree_flow)
+        _ax2.plot(
+            [_uc[0], _vc[0]],
+            [_uc[1], _vc[1]],
+            color="steelblue",
+            linewidth=_w,
+            alpha=_a,
+            solid_capstyle="round",
+        )
+
+    # Draw small arrows at midpoints to show direction
+    for (_u, _v), _fl in edge_flows.items():
+        _uc, _vc = centroids[_u], centroids[_v]
+        _mid = (_uc + _vc) / 2
+        _dir = _vc - _uc
+        _dir = _dir / (np.linalg.norm(_dir) + 1e-9) * 1000  # small arrow
+        _ax2.annotate(
+            "",
+            xy=(_mid[0] + _dir[0], _mid[1] + _dir[1]),
+            xytext=(_mid[0], _mid[1]),
+            arrowprops=dict(
+                arrowstyle="-|>",
+                color="crimson",
+                lw=1.2,
+                alpha=0.8,
+                mutation_scale=10,
+            ),
+        )
+
+    for _code, _pos in centroids.items():
+        _style = dict(boxstyle="round,pad=0.3", fc="gold", ec="black", alpha=0.9) if _code == source_code else dict(boxstyle="round,pad=0.2", fc="white", ec="gray", alpha=0.9)
+        _ax2.annotate(
+            _names.get(_code, _code),
+            xy=(_pos[0], _pos[1]),
+            ha="center", va="center", fontsize=7, fontweight="bold",
+            bbox=_style,
+        )
+
+    _ax2.set_title(f"Flow tree (MST): flows from {_names.get(source_code, source_code)}", fontsize=11)
+    _ax2.set_axis_off()
+
+    _fig.suptitle(f"Single-source flow map — {_names.get(source_code, source_code)}", fontsize=14, fontweight="bold")
+    _fig.tight_layout()
+    _fig.savefig(IMG / "07_single_source_tree.png", dpi=150, bbox_inches="tight")
+    _fig
     return
 
 

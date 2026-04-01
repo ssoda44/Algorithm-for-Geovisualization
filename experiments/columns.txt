@@ -1,0 +1,21 @@
+Column Meanings
+===============
+
+- strategy: Which algorithm produced this row.
+    - raw_directed: Straight lines from origin to destination for each selected flow pair, no tree structure.
+    - greedy_spiral_tree: Builds one spiral tree per source by merging adjacent targets outside-in, picking the farthest pair first.
+    - enhanced_greedy_spiral_tree: Same as greedy but evaluates 9 candidate merge positions per pair, scoring by length, angle balance, and node proximity.
+    - obstacle_aware_spiral_tree: Builds source trees sequentially; each tree skips merge pairs that would cross previously built trees' edges.
+- top_k: Number of highest-flow pairs selected for display.
+- source_order: Order in which source trees are built in the obstacle-aware strategy. Irrelevant for other strategies.
+- spiral_turns: Controls the angular spread of spiral merge candidates. Higher values allow wider spirals.
+- pair_count: Number of flow pairs actually included after selection.
+- coverage: Fraction of total migration flow represented by the selected pairs (0 to 1).
+- crossings: Number of pairs of carrier geometries that visually intersect. Excludes pairs sharing an endpoint.
+- node_intrusions: Number of times a carrier passes too close to an unrelated region's anchor point.
+- mean_imbalance: Average directional imbalance per pair (0 = equal both ways, 1 = entirely one-directional).
+- mean_net_flow: Average absolute difference between the two directions of each pair.
+- total_tree_length: Sum of Euclidean lengths of all carrier geometries, in map coordinate units.
+- mean_detour_ratio: Average ratio of carrier length to straight-line distance. 1.0 means straight lines; higher means longer paths due to tree merging.
+- max_detour_ratio: Worst-case detour ratio across all carriers.
+- total_represented_flow: Total migration flow in the dataset. Used to compute coverage.

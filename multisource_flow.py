@@ -43,6 +43,7 @@ class FlowMapConfig:
     merge_reward: float = 0.60
     corridor_reward: float = 0.30
     attachment_samples: tuple[float, ...] = (0.35, 0.50, 0.65)
+    source_order: str = "descending_outflow"
 
 
 @dataclass
@@ -597,6 +598,53 @@ def _source_group_intrusions(
     return intrusions
 
 
+def _edge_key(p1: Point, p2: Point) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Canonical key for an edge between two points, for deduplication."""
+    a = (round(p1.x, 6), round(p1.y, 6))
+    b = (round(p2.x, 6), round(p2.y, 6))
+    return (a, b) if a <= b else (b, a)
+
+
+def _extract_tree_edges(
+    source_paths: list[tuple[object, list[Point]]],
+) -> list[LineString]:
+    """Extract deduplicated edge segments from one source's tree paths."""
+    seen: set[tuple[tuple[float, float], tuple[float, float]]] = set()
+    edges: list[LineString] = []
+    for _, waypoints in source_paths:
+        for start, end in zip(waypoints, waypoints[1:], strict=False):
+            key = _edge_key(start, end)
+            if key not in seen:
+                seen.add(key)
+                edges.append(LineString([(start.x, start.y), (end.x, end.y)]))
+    return edges
+
+
+def _obstacle_crossings(
+    candidate_point: Point,
+    child_points: list[Point],
+    source: Point,
+    obstacle_segments: list[LineString],
+) -> int:
+    """Count crossings between candidate merge segments and existing obstacles."""
+    if not obstacle_segments:
+        return 0
+
+    local_segments = [
+        LineString([(source.x, source.y), (candidate_point.x, candidate_point.y)]),
+        *[
+            LineString([(candidate_point.x, candidate_point.y), (child.x, child.y)])
+            for child in child_points
+        ],
+    ]
+    crossings = 0
+    for seg in local_segments:
+        for obs in obstacle_segments:
+            if seg.crosses(obs):
+                crossings += 1
+    return crossings
+
+
 def _best_merge_node(
     source: Point,
     left: SpiralTreeNode,
@@ -634,9 +682,7 @@ def _best_merge_node(
     for shrink_factor in (0.58, 0.68, 0.78):
         for angle_offset_factor in (-0.20, 0.0, 0.20):
             point, angle, merge_radius = _merge_point_candidate(
-                source,
-                left,
-                right,
+                source, left, right,
                 shrink_factor=shrink_factor,
                 spiral_turns=spiral_turns,
                 angle_offset_factor=angle_offset_factor,
@@ -680,6 +726,7 @@ def _source_tree_paths(
     radius: float,
     spiral_turns: float,
     enhanced: bool,
+    obstacle_segments: list[LineString] | None = None,
 ) -> list[tuple[object, list[Point]]]:
     """Build a source-rooted spiral tree and return one waypoint path per leaf."""
 
@@ -727,10 +774,18 @@ def _source_tree_paths(
                 radius=radius,
                 enhanced=enhanced,
             )
-            outside_in_priority = -merged.radius
-            pair_candidates.append((outside_in_priority, idx, merged))
+            # Check obstacle crossings for the chosen merge point
+            merge_obs = _obstacle_crossings(
+                merged.point,
+                [left.point, right.point],
+                source,
+                obstacle_segments if obstacle_segments is not None else [],
+            )
+            # Primary sort: prefer crossing-free merges.
+            # Secondary sort: outside-in by radius (original behavior).
+            pair_candidates.append((merge_obs, -merged.radius, idx, merged))
 
-        _, merge_idx, merged = min(pair_candidates, key=lambda item: item[0])
+        _, _, merge_idx, merged = min(pair_candidates, key=lambda item: (item[0], item[1]))
         left_id = active[merge_idx]
         right_id = active[merge_idx + 1]
         nodes[left_id].parent_id = merged.node_id
@@ -913,6 +968,128 @@ def build_enhanced_greedy_spiral_tree_carriers(
 
 
 # ---------------------------------------------------------------------------
+# Obstacle-aware sequential spiral trees
+# ---------------------------------------------------------------------------
+
+def _order_source_groups(
+    groups: dict[str, list],
+    anchors: pd.Series,
+    source_order: str,
+) -> list[tuple[str, list]]:
+    """Order source groups for sequential obstacle-aware tree construction."""
+
+    items = list(groups.items())
+    if source_order == "descending_outflow":
+        items.sort(
+            key=lambda kv: sum(float(r.represented_flow) for r in kv[1]),
+            reverse=True,
+        )
+    elif source_order == "ascending_outflow":
+        items.sort(
+            key=lambda kv: sum(float(r.represented_flow) for r in kv[1]),
+        )
+    elif source_order == "west_to_east":
+        items.sort(key=lambda kv: anchors[kv[0]].x)
+    elif source_order == "north_to_south":
+        items.sort(key=lambda kv: anchors[kv[0]].y, reverse=True)
+    else:
+        raise ValueError(
+            "source_order must be one of 'descending_outflow', "
+            "'ascending_outflow', 'west_to_east', or 'north_to_south'"
+        )
+    return items
+
+
+def _build_obstacle_aware_spiral_tree_carriers(
+    selected_pairs: pd.DataFrame,
+    provinces: gpd.GeoDataFrame,
+    *,
+    spiral_turns: float,
+    samples_per_curve: int,
+    node_buffer_ratio: float,
+    hub_radius_ratio: float,
+    source_order: str,
+) -> pd.DataFrame:
+    """Route source trees sequentially, treating earlier trees as obstacles."""
+
+    anchors, names, map_center, _, radius, _ = _tree_context(
+        provinces,
+        node_buffer_ratio=node_buffer_ratio,
+        hub_radius_ratio=hub_radius_ratio,
+    )
+
+    # Group flows by source and order them
+    source_groups: dict[str, list] = {}
+    for row in _ordered_pairs_for_routing(selected_pairs).itertuples(index=False):
+        source_groups.setdefault(row.dominant_origin, []).append(row)
+    ordered_sources = _order_source_groups(source_groups, anchors, source_order)
+
+    carriers: list[dict[str, object]] = []
+    obstacle_segments: list[LineString] = []
+
+    for source_code, rows in ordered_sources:
+        source = anchors[source_code]
+        endpoint_codes = {source_code, *(r.dominant_destination for r in rows)}
+
+        source_paths = _source_tree_paths(
+            rows,
+            source_code=source_code,
+            source=source,
+            anchors=anchors,
+            anchors_codes=endpoint_codes,
+            radius=radius,
+            spiral_turns=spiral_turns,
+            enhanced=True,
+            obstacle_segments=obstacle_segments,
+        )
+
+        # Build carrier records and accumulate curved geometries as obstacles
+        for row, waypoints in source_paths:
+            geometry, control = _curve_through_waypoints(
+                waypoints,
+                map_center,
+                curvature_scale=0.10,
+                samples_per_curve=samples_per_curve,
+            )
+            carriers.append(
+                _pair_carrier_record(
+                    row,
+                    names,
+                    start=waypoints[0],
+                    end=waypoints[-1],
+                    geometry=geometry,
+                    control=control,
+                    waypoints=waypoints,
+                )
+            )
+            obstacle_segments.append(geometry)
+
+    return _finalize_carriers(pd.DataFrame(carriers))
+
+
+def build_obstacle_aware_spiral_tree_carriers(
+    selected_pairs: pd.DataFrame,
+    provinces: gpd.GeoDataFrame,
+    spiral_turns: float = 1.10,
+    samples_per_curve: int = 25,
+    node_buffer_ratio: float = 0.018,
+    hub_radius_ratio: float = 0.10,
+    source_order: str = "descending_outflow",
+) -> pd.DataFrame:
+    """Build sequential obstacle-aware spiral trees."""
+
+    return _build_obstacle_aware_spiral_tree_carriers(
+        selected_pairs,
+        provinces,
+        spiral_turns=spiral_turns,
+        samples_per_curve=samples_per_curve,
+        node_buffer_ratio=node_buffer_ratio,
+        hub_radius_ratio=hub_radius_ratio,
+        source_order=source_order,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
 
@@ -982,6 +1159,7 @@ def _empty_metrics() -> dict[str, float]:
         "node_intrusions": 0.0,
         "mean_imbalance": 0.0,
         "mean_net_flow": 0.0,
+        "total_tree_length": 0.0,
         "mean_detour_ratio": 0.0,
         "max_detour_ratio": 0.0,
     }
@@ -1008,6 +1186,7 @@ def evaluate_flow_map(
         ),
         "mean_imbalance": float(selected["imbalance_ratio"].mean()),
         "mean_net_flow": float(selected["net_flow"].mean()),
+        "total_tree_length": float(carriers["geometry_length"].sum()),
         "mean_detour_ratio": float(carriers["detour_ratio"].mean()),
         "max_detour_ratio": float(carriers["detour_ratio"].max()),
     }
@@ -1078,11 +1257,23 @@ def build_solution(
             corridor_reward=config.corridor_reward,
             attachment_samples=config.attachment_samples,
         )
+    elif config.strategy == "obstacle_aware_spiral_tree":
+        selected = _select_pairs_for_strategy(pair_summary, config)
+        carriers = build_obstacle_aware_spiral_tree_carriers(
+            selected,
+            provinces,
+            spiral_turns=config.spiral_turns,
+            samples_per_curve=config.samples_per_curve,
+            node_buffer_ratio=config.node_buffer_ratio,
+            hub_radius_ratio=config.hub_radius_ratio,
+            source_order=config.source_order,
+        )
     else:
         raise ValueError(
             "strategy must be one of "
-            "'raw_directed', 'greedy_spiral_tree', or "
-            "'enhanced_greedy_spiral_tree'"
+            "'raw_directed', 'greedy_spiral_tree', "
+            "'enhanced_greedy_spiral_tree', or "
+            "'obstacle_aware_spiral_tree'"
         )
 
     metrics = evaluate_flow_map(
@@ -1119,6 +1310,7 @@ def compare_strategies(
                 "selection_mode": config.selection_mode,
                 "spiral_turns": config.spiral_turns,
                 "length_penalty": config.length_penalty,
+                "source_order": config.source_order,
                 **result.metrics,
             }
         )
@@ -1201,6 +1393,16 @@ def default_strategy_configs(period: str = "2024JJ00") -> list[FlowMapConfig]:
             merge_reward=0.80,
             corridor_reward=0.45,
         ),
+        FlowMapConfig(
+            strategy="obstacle_aware_spiral_tree",
+            period=period,
+            top_k=40,
+            min_total_flow=0.0,
+            selection_mode="total_flow",
+            spiral_turns=1.10,
+            hub_radius_ratio=0.10,
+            source_order="descending_outflow",
+        ),
     ]
 
 
@@ -1226,4 +1428,30 @@ def enhanced_spiral_sweep_configs(
         )
         for top_k in top_ks
         for spiral_turn in spiral_turn_values
+    ]
+
+
+def obstacle_aware_ordering_configs(
+    period: str = "2024JJ00",
+    source_orders: Iterable[str] = (
+        "descending_outflow",
+        "ascending_outflow",
+        "west_to_east",
+        "north_to_south",
+    ),
+) -> list[FlowMapConfig]:
+    """Generate configs for the source-ordering experiment."""
+
+    return [
+        FlowMapConfig(
+            strategy="obstacle_aware_spiral_tree",
+            period=period,
+            top_k=40,
+            min_total_flow=0.0,
+            selection_mode="total_flow",
+            spiral_turns=1.10,
+            hub_radius_ratio=0.10,
+            source_order=order,
+        )
+        for order in source_orders
     ]
