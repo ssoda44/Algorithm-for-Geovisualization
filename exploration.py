@@ -74,6 +74,11 @@ def _(municipalities):
 @app.cell
 def _(DATA, mo, pd):
     obs = pd.read_csv(DATA / "Observations.csv", sep=";")
+    if list(obs.columns) == ["version https://git-lfs.github.com/spec/v1"]:
+        raise RuntimeError(
+            "data/Observations.csv is a Git LFS pointer, not the real dataset. "
+            "Run `git lfs pull` in the repository root and rerun the script."
+        )
     mo.md(f"## Flow observations\nLoaded **{len(obs):,}** rows")
     return (obs,)
 
