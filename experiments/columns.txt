@@ -2,20 +2,29 @@ Column Meanings
 ===============
 
 - strategy: Which algorithm produced this row.
-    - raw_directed: Straight lines from origin to destination for each selected flow pair, no tree structure.
-    - greedy_spiral_tree: Builds one spiral tree per source by merging adjacent targets outside-in, picking the farthest pair first.
-    - enhanced_greedy_spiral_tree: Same as greedy but evaluates 9 candidate merge positions per pair, scoring by length, angle balance, and node proximity.
-    - obstacle_aware_spiral_tree: Builds source trees sequentially; each tree skips merge pairs that would cross previously built trees' edges.
-- top_k: Number of highest-flow pairs selected for display.
-- source_order: Order in which source trees are built in the obstacle-aware strategy. Irrelevant for other strategies.
-- spiral_turns: Controls the angular spread of spiral merge candidates. Higher values allow wider spirals.
-- pair_count: Number of flow pairs actually included after selection.
-- coverage: Fraction of total migration flow represented by the selected pairs (0 to 1).
-- crossings: Number of pairs of carrier geometries that visually intersect. Excludes pairs sharing an endpoint.
-- node_intrusions: Number of times a carrier passes too close to an unrelated region's anchor point.
-- mean_imbalance: Average directional imbalance per pair (0 = equal both ways, 1 = entirely one-directional).
-- mean_net_flow: Average absolute difference between the two directions of each pair.
-- total_tree_length: Sum of Euclidean lengths of all carrier geometries, in map coordinate units.
-- mean_detour_ratio: Average ratio of carrier length to straight-line distance. 1.0 means straight lines; higher means longer paths due to tree merging.
-- max_detour_ratio: Worst-case detour ratio across all carriers.
-- total_represented_flow: Total migration flow in the dataset. Used to compute coverage.
+    - raw_directed: Straight directed lines from origin to destination.
+    - force_adjusted_curved_od: Quadratic curved carriers with iterative control-point repulsion.
+    - quality_aware_force_adjusted_od: Greedy flow selection guided by a quality score, then routed with force-adjusted curves.
+    - quality_aware_polyline_od: Greedy polyline routing using horizontal, vertical, and diagonal candidates with lane separation.
+- top_k: Number of highest-flow directed pairs used as the seed display set.
+- greedy_candidate_limit: Number of directed pairs considered by the quality-aware greedy selection.
+- force_iterations: Number of repulsion iterations used by the curved method.
+- polyline_lane_ratio: Offset used to separate opposing polyline routes into nearby lanes.
+- parameter_family: Which algorithm the parameter sweep row belongs to.
+- parameter_name: Name of the varied parameter in the compact sensitivity table.
+- parameter_value: Numeric value of that varied parameter.
+- pair_count: Number of flow pairs actually included in the final visualization.
+- coverage: Fraction of total directed flow represented by the selected pairs.
+- crossings: Number of visually intersecting carrier pairs, excluding pairs that share an endpoint.
+- node_intrusions: Number of times a carrier passes too close to an unrelated region anchor.
+- mean_imbalance: Average directional imbalance per selected pair.
+- mean_net_flow: Average absolute directional net flow per selected pair.
+- total_tree_length: Total geometry length of all displayed carriers.
+- mean_detour_ratio: Average ratio of carrier length to straight-line distance.
+- max_detour_ratio: Maximum detour ratio among displayed carriers.
+- total_represented_flow: Total directed flow in the underlying dataset.
+- quality_score: Scalar objective used only for the quality-aware selection method.
+- clutter_score: `crossings + node_intrusions`.
+- coverage_minus_clutter: Simple report-side trade-off score `coverage - 0.01 * clutter_score`.
+- level: Geographic granularity used in the granularity experiment (`province` or `municipality`).
+- n_regions: Number of regions in that geographic level.

@@ -2,23 +2,79 @@
 
 ## Independent Variables
 
-- **source_order**: The sequence in which source trees are constructed in the obstacle-aware strategy. Determines which trees get obstacle-free routing and which must avoid earlier trees.
-- **top_k**: The number of highest-flow region pairs selected for visualization. Controls how dense the flow map is.
-- **geographic level**: The administrative granularity of the regions — provinces (12 regions) or municipalities (342 regions). Affects how much spatial freedom the algorithm has to place merge points.
-- **spiral_turns**: The angle restriction parameter (α) controlling how tightly spiral merge candidates wrap around the source. Lower values produce tighter, more direct trees; higher values allow wider spirals with more merging freedom.
+- **strategy**: The routing and selection method used to construct the flow map.
+  - `raw_directed`: Straight directed OD segments.
+  - `force_adjusted_curved_od`: Curved OD segments with repulsive control-point updates.
+  - `quality_aware_force_adjusted_od`: Greedy flow selection using a quality score, then force-adjusted curved routing.
+  - `quality_aware_polyline_od`: Polyline routing with horizontal, vertical, and diagonal candidates plus directional lane offsets.
+- **top_k**: Number of highest-flow directed pairs used as the initial displayed set.
+- **force_iterations**: Number of repulsion iterations applied in the curved method.
+- **greedy_candidate_limit**: Number of candidate directed flows considered by the quality-aware greedy selection.
+- **polyline_lane_ratio**: Size of the lane offset used to separate opposite polyline directions.
+- **geographic level**: Province level (12 regions) versus municipality level (342 regions).
 
-## Dependent Variables (Quality Measures)
+## Dependent Variables
 
-Both measures are drawn from the flow tree quality criteria on lecture slide 54.
+The current project evaluates each valid flow map using four primary quality measures.
+
+## Coverage
+
+Fraction of total directed flow value represented by the selected carriers:
+
+\[
+\mathrm{coverage}(S)=\frac{\sum_{e\in S} w_e}{\sum_{e\in E} w_e}
+\]
+
+Higher is better. This measure captures how much of the dataset remains visible after filtering or greedy selection.
 
 ## Crossing Count
 
-Number of pairs of flow lines whose geometries intersect. Carriers sharing an endpoint (same source or target region) are excluded — those touches are structural, not crossings. Measured using Shapely's `crosses()` on the rendered carrier geometries.
+Number of carrier pairs whose geometries intersect, excluding pairs that share an endpoint. Crossings are measured on the final rendered carrier geometries using Shapely's `crosses()`.
 
-Lower is better. 0 is ideal.
+Lower is better. This is the main readability measure.
 
-## Total Tree Length
+## Node Intrusions
 
-Sum of Euclidean lengths of all carrier geometries. Straight-line carriers (raw directed) give the minimum; tree strategies add length through merging detours. Reported alongside **mean detour ratio** (carrier length / straight-line distance, averaged over all carriers) as a normalized variant that is comparable across different top_k values and geographic levels.
+Number of times a carrier passes too close to the anchor point of an unrelated region. This penalizes lines that visually interfere with node labels or region identity.
 
-Lower is better. A mean detour ratio of 1.0 means all paths are straight lines.
+Lower is better.
+
+## Mean Detour Ratio
+
+Average ratio between route length and straight-line source-to-target distance:
+
+\[
+\mathrm{detour}(S)=\frac{1}{|S|}\sum_{e\in S}\frac{\mathrm{length}(e)}{\mathrm{dist}(e)}
+\]
+
+A value of `1.0` means the route is geometrically direct. Higher values indicate extra bending or routing overhead.
+
+Lower is better.
+
+## Secondary Reported Measures
+
+- **total_tree_length**: Sum of all carrier lengths.
+- **max_detour_ratio**: Worst-case detour ratio among the displayed carriers.
+- **clutter_score**: `crossings + node_intrusions`.
+- **coverage_minus_clutter**: Simple summary score `coverage - 0.01 * clutter_score`, used only as a compact comparison aid in the tables.
+
+## Quality Objective For Algorithm 3
+
+The greedy selection algorithm uses the scalar objective
+
+\[
+Q(S)=
+\alpha \cdot \mathrm{coverage}(S)
+-\beta \cdot \mathrm{crossings}(S)
+-\gamma \cdot \mathrm{intrusions}(S)
+-\delta \cdot (\mathrm{detour}(S)-1)
+\]
+
+with the current default weights
+
+- \(\alpha = 1.0\)
+- \(\beta = 0.008\)
+- \(\gamma = 0.004\)
+- \(\delta = 0.20\)
+
+This objective is not intended as a universal truth; it is a heuristic way to balance information retention against visual clutter.

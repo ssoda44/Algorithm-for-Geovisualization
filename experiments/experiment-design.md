@@ -1,181 +1,240 @@
 # Experiment Design
 
-## Quality Measures (Dependent Variables)
+## Goal
 
-Both measures are grounded in the lecture material (slide 54), which lists quality criteria for flow trees:
+The goal of the project is not to find one universally best multi-source flow-map algorithm, but to study the trade-off between:
 
-1. **Crossing count** — "few crossings (preferably none)." We count pairwise intersections between carrier geometries across all trees. Lower is better. This is the primary measure because crossings directly harm readability.
+- preserving more flow information (`coverage`)
+- keeping the map readable (`crossings`, `node_intrusions`)
+- keeping routes geometrically efficient (`mean_detour_ratio`)
 
-2. **Total tree length** — "merge edges quickly." The sum of all carrier geometry lengths. Lower values indicate more efficient routing. Raw directed lines give the minimum possible length; tree strategies add length through merging and detours. We also report mean detour ratio (carrier length / straight-line distance) as a normalized version of this measure.
+Our final setup therefore compares four heuristics that emphasize different parts of this trade-off.
 
-These two measures are in tension: reducing crossings (via obstacle avoidance or tree routing) tends to increase total length. The experiments measure both to assess the trade-off.
+## Algorithm Design
+
+### Algorithm 1: Thresholded Direct OD Lines
+
+This is the baseline. We sort directed OD pairs by flow magnitude and keep the top `k` pairs. Each selected pair is drawn as one straight directed segment from the source anchor to the target anchor.
+
+- Strength: minimum geometric distortion
+- Weakness: crossings increase quickly as density grows
+- Type: simple deterministic baseline
+
+### Algorithm 2: Force-Adjusted Curved OD
+
+This method starts from the same top-`k` directed flows as Algorithm 1, but replaces each straight line by a quadratic curve. The control point first bends the curve away from the map center, then multiple repulsion iterations push nearby or crossing curves apart while a restoring term keeps the curve near its original shape.
+
+- Strength: reduces clutter without changing the displayed flow set
+- Weakness: adds detour
+- Type: geometric routing heuristic
+
+### Algorithm 3: Quality-Aware Force-Adjusted OD
+
+This method extends Algorithm 2 by changing the selection stage. Instead of fixing the output to exactly the top `k` flows, it starts from a top-`k` seed and greedily adds extra flows from a candidate pool whenever they improve a scalar quality objective:
+
+\[
+Q(S)=
+\alpha \cdot \mathrm{coverage}(S)
+-\beta \cdot \mathrm{crossings}(S)
+-\gamma \cdot \mathrm{intrusions}(S)
+-\delta \cdot (\mathrm{detour}(S)-1)
+\]
+
+The final selected flows are then routed with the force-adjusted curved method.
+
+- Strength: improves coverage in a controlled way
+- Weakness: may reintroduce some clutter
+- Type: greedy selection heuristic plus curved routing heuristic
+
+### Algorithm 4: Quality-Aware Polyline OD
+
+This method keeps the top-`k` flow set fixed, but changes the routing model. For each flow, it generates multiple candidate polylines using horizontal, vertical, and occasional diagonal segments. Opposite directions receive a small lane offset to preserve directional visibility. The flow is routed along the candidate with the lowest local cost, based on added crossings, overlap, near-conflicts, node intrusions, and detour.
+
+\[
+\mathrm{cost}(r)
+=
+w_1 \, \Delta \mathrm{crossings}
++
+w_2 \, \Delta \mathrm{overlap}
++
+w_3 \, \Delta \mathrm{intrusions}
++
+w_4 \, \Delta \mathrm{detour}
+\]
+
+- Strength: strongly reduces crossings while preserving directional detail
+- Weakness: detour is higher than the curved methods
+- Type: greedy local routing heuristic
+
+## Quality Measures
+
+We evaluate all strategies using the following measures:
+
+1. **Coverage**: fraction of total directed flow represented by the displayed carriers.
+2. **Crossing count**: number of carrier pairs that intersect.
+3. **Node intrusions**: number of times a carrier passes too close to an unrelated region anchor.
+4. **Mean detour ratio**: average route length divided by straight-line distance.
+
+These measures deliberately pull in different directions. A solution with low crossings may become too schematic; a solution with high coverage may become cluttered.
 
 ---
 
-## Experiment 1: Effect of Source Ordering on Obstacle-Aware Quality
+## Experiment 1: Main Strategy Comparison
 
-**Question:** Does the order in which source trees are constructed affect the crossing count of the obstacle-aware sequential algorithm?
+**Question:** How do the four strategies compare under one shared default setting?
 
-**Motivation:** The obstacle-aware algorithm builds trees one at a time, treating earlier trees as obstacles. The first tree gets clean routing; later trees are increasingly constrained. The project description states: *"if your algorithm has any parameters that must be set, this is an excellent place to start to phrase a question."* Source ordering is the only free parameter unique to our algorithmic contribution, making it a natural experimental variable.
+**Independent variable:** `strategy`
 
-**Independent variable:** `source_order` — four orderings:
-- `descending_outflow`: build high-traffic trees first (they get the cleanest routing)
-- `ascending_outflow`: build low-traffic trees first
-- `west_to_east`: geographic ordering by anchor x-coordinate
-- `north_to_south`: geographic ordering by anchor y-coordinate (descending)
+**Fixed parameters:** province-level data, `top_k = 40`, `force_iterations = 5`, `greedy_candidate_limit = 60`, `polyline_lane_ratio = 0.01`
 
-**Dependent variables:** crossing count, total tree length, mean detour ratio
-
-**Fixed parameters:** province-level data (12 regions), top_k=40, spiral_turns=1.10
-
-**Output:** `exp1_source_ordering.csv`
+**Output:** `exp1_strategy_comparison.csv`, `exp1_four_algorithms_comparison.png`
 
 ### Results
 
-| Source Order       | Crossings | Total Tree Length | Mean Detour |
-|--------------------|-----------|-------------------|-------------|
-| descending_outflow | 74        | 4,530,937         | 1.197       |
-| ascending_outflow  | 81        | 4,556,445         | 1.204       |
-| west_to_east       | 83        | 4,529,630         | 1.198       |
-| north_to_south     | 72        | 4,542,018         | 1.202       |
+| Strategy | Coverage | Crossings | Intrusions | Mean Detour |
+|----------|----------|-----------|------------|-------------|
+| raw_directed | 0.743 | 28 | 7 | 1.000 |
+| force_adjusted_curved_od | 0.743 | 19 | 5 | 1.032 |
+| quality_aware_force_adjusted_od | 0.789 | 23 | 5 | 1.029 |
+| quality_aware_polyline_od | 0.743 | 8 | 1 | 1.064 |
 
-**Observations:** North-to-south ordering achieves the fewest crossings (72), slightly beating the default descending-outflow (74). Ascending outflow and west-to-east perform worst (81, 83). The spread of 11 crossings (72–83) confirms that source ordering matters — it is not a negligible parameter. Total tree length varies by less than 0.6% across orderings (4,529,630–4,556,445), confirming that ordering affects crossing avoidance without significant path length cost.
+**Observations:**
+
+- Algorithm 2 clearly improves the baseline at equal coverage.
+- Algorithm 3 gives the highest coverage, but not the lowest crossings.
+- Algorithm 4 gives the lowest clutter among the detailed-routing methods, but pays for it with extra detour.
+- There is no single universal winner: Algorithm 3 is best when coverage matters most, while Algorithm 4 is best when minimizing clutter at fixed coverage matters most.
 
 ---
 
-## Experiment 2: Effect of Flow Density on Crossing Count
+## Experiment 2: Effect of Flow Density
 
-**Question:** How does the number of displayed flow pairs (top_k) affect crossing count across strategies, and does obstacle-aware degrade more gracefully?
-
-**Motivation:** As more flows are added to the visualization, crossings increase — but the rate of increase may differ between strategies. This tests scalability and helps identify a "good default" top_k, as the project description suggests. It also reveals whether the obstacle-aware benefit grows or shrinks at higher density.
+**Question:** How do the strategies behave as the map becomes denser?
 
 **Independent variables:**
+
 - `top_k` ∈ {10, 20, 30, 40, 50, 60}
-- `strategy` ∈ {raw_directed, greedy_spiral_tree, enhanced_greedy_spiral_tree, obstacle_aware_spiral_tree}
+- `strategy`
 
-**Dependent variables:** crossing count, total tree length, mean detour ratio
-
-**Fixed parameters:** province-level data (12 regions), spiral_turns=1.10
+**Fixed parameters:** province-level data, `force_iterations = 5`, `greedy_candidate_limit = 60`, `polyline_lane_ratio = 0.01`
 
 **Output:** `exp2_flow_density.csv`
 
-### Results — Crossing Count
+### Key Results
 
-| top_k | raw_directed | greedy_spiral | enhanced_spiral | obstacle_aware |
-|-------|-------------|---------------|-----------------|----------------|
-| 10    | 0           | 0             | 0               | 0              |
-| 20    | 3           | 7             | 7               | 7              |
-| 30    | 12          | 28            | 28              | 25             |
-| 40    | 28          | 77            | 85              | 74             |
-| 50    | 69          | 169           | 183             | 158            |
-| 60    | 122         | 240           | 238             | 214            |
+At `top_k = 40`:
 
-### Results — Total Tree Length
+- `raw_directed`: `coverage = 0.743`, `crossings = 28`
+- `force_adjusted_curved_od`: `coverage = 0.743`, `crossings = 19`
+- `quality_aware_force_adjusted_od`: `coverage = 0.789`, `crossings = 23`
+- `quality_aware_polyline_od`: `coverage = 0.743`, `crossings = 8`
 
-| top_k | raw_directed | greedy_spiral | enhanced_spiral | obstacle_aware |
-|-------|-------------|---------------|-----------------|----------------|
-| 10    | 652,888     | 743,431       | 751,659         | 751,659        |
-| 20    | 1,354,649   | 1,938,996     | 1,949,004       | 1,921,032      |
-| 30    | 2,153,518   | 3,231,586     | 3,269,001       | 3,269,779      |
-| 40    | 3,308,832   | 4,550,225     | 4,622,581       | 4,530,937      |
-| 50    | 4,394,550   | 5,986,733     | 6,113,921       | 5,936,809      |
-| 60    | 5,601,907   | 7,705,687     | 7,833,930       | 7,619,772      |
+At `top_k = 60`:
+
+- `raw_directed`: `coverage = 0.857`, `crossings = 122`
+- `force_adjusted_curved_od`: `coverage = 0.857`, `crossings = 102`
+- `quality_aware_force_adjusted_od`: `coverage = 0.857`, `crossings = 102`
+- `quality_aware_polyline_od`: `coverage = 0.857`, `crossings = 56`
 
 **Observations:**
-- At low density (top_k ≤ 20), all tree strategies perform similarly — there are few inter-tree crossings to avoid.
-- The obstacle-aware advantage emerges at top_k=30 and grows with density. At top_k=60 it saves 26 crossings vs greedy (214 vs 240), an 11% reduction.
-- Enhanced greedy consistently performs *worse* than basic greedy on crossings at high density (e.g., 183 vs 169 at top_k=50). Its locally-optimized merge positions create more inter-tree conflicts when overlaid.
-- Raw directed has fewest crossings at all levels because straight lines occupy less space than tree carriers, but it offers no edge merging (no visual aggregation).
-- On total tree length, obstacle-aware produces the shortest trees among tree strategies at every top_k ≥ 20. At top_k=60 it is 1.1% shorter than greedy (7,619,772 vs 7,705,687) and 2.7% shorter than enhanced (7,619,772 vs 7,833,930). The merge reordering also happens to produce shorter paths.
-- Enhanced greedy consistently has the longest total tree length among tree strategies, reflecting the cost of its locally-optimized merge positions.
+
+- All methods suffer as density increases, but Algorithm 4 scales better on crossings than the other detailed methods.
+- Algorithm 3 is strongest at low and medium density because it quickly raises coverage by adding extra important flows.
+- At very high density, the coverage advantage of Algorithm 3 disappears because the fixed top-`k` methods eventually catch up.
+- Algorithm 4 remains the best low-crossing routing strategy across the denser settings.
 
 ---
 
-## Experiment 3: Effect of Geographic Granularity
+## Experiment 3: Parameter Sensitivity
 
-**Question:** Does the obstacle-aware approach benefit more from finer geographic granularity (more regions, sparser geography)?
-
-**Motivation:** At province level (12 centroids), merge points are tightly clustered — there is limited room for the obstacle-aware algorithm to find alternative merge orders. With 342 municipalities, the sparser geography may give more freedom to route around obstacles. This tests whether our algorithm scales to realistic data sizes, which the rubric evaluates under "Data" ("realistic and interesting data is used").
+**Question:** Which parameter values work well as defaults for the curved, quality-aware, and polyline methods?
 
 **Independent variables:**
-- Geographic level: province (12 regions, top_k=40) vs municipality (342 regions, top_k=100)
-- `strategy` ∈ {raw_directed, greedy_spiral_tree, enhanced_greedy_spiral_tree, obstacle_aware_spiral_tree}
 
-**Dependent variables:** crossing count, total tree length, mean detour ratio
+- `force_iterations` ∈ {0, 5, 10, 15} for Algorithm 2
+- `greedy_candidate_limit` ∈ {50, 60, 70} for Algorithm 3
+- `polyline_lane_ratio` ∈ {0.00, 0.01, 0.02} for Algorithm 4
 
-**Fixed parameters:** spiral_turns=1.10, source_order=descending_outflow
+**Fixed parameters:** province-level data, `top_k = 40` unless the quality-aware seed size is explicitly varied inside Algorithm 3
 
-**Output:** `exp3_granularity.csv`
+**Output:** `exp3_parameter_sensitivity.csv`
 
-### Results
+### Key Results
 
-**Province level (12 regions, top_k=40):**
+Curved routing:
 
-| Strategy              | Crossings | Total Tree Length | Mean Detour |
-|-----------------------|-----------|-------------------|-------------|
-| raw_directed          | 28        | 3,308,832         | 1.000       |
-| greedy_spiral_tree    | 77        | 4,550,225         | 1.204       |
-| enhanced_greedy       | 85        | 4,622,581         | 1.217       |
-| obstacle_aware        | 74        | 4,530,937         | 1.197       |
+| Force Iterations | Crossings | Intrusions | Mean Detour |
+|------------------|-----------|------------|-------------|
+| 0 | 27 | 4 | 1.007 |
+| 5 | 19 | 5 | 1.032 |
+| 10 | 19 | 6 | 1.056 |
+| 15 | 17 | 6 | 1.072 |
 
-**Municipality level (342 regions, top_k=100):**
+Quality-aware selection (`top_k = 40`):
 
-| Strategy              | Crossings | Total Tree Length | Mean Detour |
-|-----------------------|-----------|-------------------|-------------|
-| raw_directed          | 8         | 2,065,957         | 1.000       |
-| greedy_spiral_tree    | 6         | 2,235,642         | 1.270       |
-| enhanced_greedy       | 7         | 2,207,881         | 1.239       |
-| obstacle_aware        | 6         | 2,177,141         | 1.227       |
+| Candidate Limit | Pair Count | Coverage | Crossings | Intrusions |
+|-----------------|------------|----------|-----------|------------|
+| 50 | 44 | 0.768 | 20 | 5 |
+| 60 | 48 | 0.789 | 23 | 5 |
+| 70 | 50 | 0.797 | 23 | 6 |
+
+Polyline routing:
+
+| Lane Ratio | Crossings | Intrusions | Mean Detour |
+|------------|-----------|------------|-------------|
+| 0.00 | 5 | 3 | 1.133 |
+| 0.01 | 8 | 1 | 1.064 |
+| 0.02 | 12 | 3 | 1.091 |
 
 **Observations:**
-- At province level, obstacle-aware has both the fewest crossings (74) and the shortest total tree length (4,530,937) among tree strategies. Enhanced greedy is worst on both measures.
-- At municipality level, obstacle-aware ties greedy for fewest crossings (6) while having the shortest total tree length (2,177,141 vs 2,235,642 for greedy, a 2.6% reduction). It dominates on both quality measures at this granularity.
-- The relative improvement from obstacle-awareness is more pronounced at province level (74 vs 77–85 crossings) than municipality level (6 vs 6–7), but at municipality level it still achieves the best combined performance.
-- Total tree lengths are lower at municipality level despite more carriers (top_k=100 vs 40), because the top municipality flows connect nearby regions with shorter paths.
+
+- `force_iterations = 5` gives most of the crossing reduction without excessive detour.
+- `greedy_candidate_limit = 60` is a good default for Algorithm 3 because it substantially improves coverage while staying cleaner than the larger pool.
+- `polyline_lane_ratio = 0.01` is the best balanced default for Algorithm 4: lower intrusion than the alternatives with moderate detour.
 
 ---
 
-## Experiment 4: Effect of Spiral Turns (Angle Restriction α)
+## Experiment 4: Geographic Granularity
 
-**Question:** How does the angle restriction parameter affect crossing count and total tree length, and does obstacle-aware maintain its advantage across different α values?
-
-**Motivation:** The spiral turns parameter controls how tightly merge candidates cluster around the source. It is the core parameter of the spiral tree model from the lecture. Sweeping it tests whether our obstacle-aware improvement is robust or only works at a specific α, and helps identify a good default value. This strengthens the "Algorithm → Analysis" rubric line.
+**Question:** How do the strategies behave on a much denser municipality-level dataset?
 
 **Independent variables:**
-- `spiral_turns` ∈ {0.50, 0.75, 1.00, 1.10, 1.25, 1.50}
-- `strategy` ∈ {greedy_spiral_tree, enhanced_greedy_spiral_tree, obstacle_aware_spiral_tree}
 
-**Dependent variables:** crossing count, total tree length, mean detour ratio
+- geographic level ∈ {province, municipality}
+- `strategy`
 
-**Fixed parameters:** province-level data (12 regions), top_k=40
+**Fixed parameters:** `top_k = 40`, `force_iterations = 5`, `greedy_candidate_limit = 60`, `polyline_lane_ratio = 0.01`
 
-**Output:** `exp4_spiral_turns.csv`
+**Output:** `exp4_granularity.csv`
 
-### Results — Crossing Count
+### Key Results
 
-| spiral_turns | greedy | enhanced | obstacle_aware |
-|-------------|--------|----------|----------------|
-| 0.50        | 103    | 94       | 79             |
-| 0.75        | 103    | 94       | 79             |
-| 1.00        | 87     | 90       | 74             |
-| 1.10        | 77     | 85       | 74             |
-| 1.25        | 76     | 79       | 73             |
-| 1.50        | 73     | 74       | 69             |
+Province:
 
-### Results — Total Tree Length
+- `raw_directed`: `coverage = 0.743`, `crossings = 28`, `intrusions = 7`
+- `force_adjusted_curved_od`: `coverage = 0.743`, `crossings = 19`, `intrusions = 5`
+- `quality_aware_force_adjusted_od`: `coverage = 0.789`, `crossings = 23`, `intrusions = 5`
+- `quality_aware_polyline_od`: `coverage = 0.743`, `crossings = 8`, `intrusions = 1`
 
-| spiral_turns | greedy    | enhanced  | obstacle_aware |
-|-------------|-----------|-----------|----------------|
-| 0.50        | 5,440,998 | 5,409,812 | 5,149,969      |
-| 0.75        | 5,440,998 | 5,409,812 | 5,149,969      |
-| 1.00        | 4,723,295 | 4,856,971 | 4,689,615      |
-| 1.10        | 4,550,225 | 4,622,581 | 4,530,937      |
-| 1.25        | 4,371,452 | 4,438,181 | 4,366,016      |
-| 1.50        | 4,203,601 | 4,244,790 | 4,219,736      |
+Municipality:
+
+- `raw_directed`: `coverage = 0.099`, `crossings = 0`, `intrusions = 118`
+- `force_adjusted_curved_od`: `coverage = 0.099`, `crossings = 0`, `intrusions = 114`
+- `quality_aware_force_adjusted_od`: `coverage = 0.107`, `crossings = 0`, `intrusions = 114`
+- `quality_aware_polyline_od`: `coverage = 0.099`, `crossings = 0`, `intrusions = 94`
 
 **Observations:**
-- Obstacle-aware has the fewest crossings at every α value tested. The advantage is largest at low α (79 vs 103 for greedy at α=0.50, a 23% reduction) and smallest at high α (69 vs 73 at α=1.50, a 5% reduction).
-- Higher spiral_turns consistently reduces both crossings and total tree length across all strategies. At α=1.50, trees are ~23% shorter and have ~33% fewer crossings than at α=0.50.
-- Values 0.50 and 0.75 produce identical results — the algorithm's merge candidates don't change below a certain threshold.
-- Obstacle-aware achieves the shortest total tree length at α ≤ 1.00 and is within 0.4% of the shortest at higher values. It wins on both measures simultaneously across the full α range.
-- A good default is α=1.10–1.25: crossings are near their minimum and detour ratios are moderate (1.15–1.20).
+
+- At municipality scale, the crossing metric becomes less informative because the selected flows are already sparse enough that none of the methods cross.
+- The meaningful difference there is node intrusions, where Algorithm 4 performs best.
+- Algorithm 3 still gives the best coverage at municipality level.
+
+## Final Takeaway
+
+The experiments show that the design problem is genuinely multi-objective:
+
+- **Algorithm 2** is a clean improvement over the direct baseline when the selected flow set is fixed.
+- **Algorithm 3** is the best method when the goal is to preserve more flow information while keeping clutter acceptable.
+- **Algorithm 4** is the best method when the goal is to preserve detailed OD structure while minimizing crossings.
+
+This is sufficient for the report requirement: we have a clear input model, explicit quality measures, multiple heuristics, and experiments that identify good default parameter values rather than claiming one globally optimal method.
