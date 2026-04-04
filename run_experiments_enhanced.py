@@ -1,8 +1,12 @@
 """Run experiments for the enhanced greedy spiral tree and save results to CSV."""
 
 from pathlib import Path
-
+import multisource_flow as msf
+import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
+OUT = Path("experiments")
+OUT.mkdir(exist_ok=True)
 import pandas as pd
 import geopandas as gpd
 
@@ -102,7 +106,7 @@ def experiment_2_flow_density():
     print("=== Experiment 2 (Enhanced): Flow Density (top_k) ===")
     provinces, flows, pairs = load_province_dataset()
 
-    top_ks = [10, 20, 30, 40, 50, 60]
+    top_ks = [20,40, 60]
 
     rows = []
     for top_k in top_ks:

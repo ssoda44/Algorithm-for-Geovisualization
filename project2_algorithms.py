@@ -28,10 +28,9 @@ def _():
 
     import multisource_flow as msf
 
-    DATA = Path("data")
     IMG = Path("__marimo__")
     IMG.mkdir(exist_ok=True)
-    return DATA, IMG, mo, msf, np, plt
+    return IMG, mo, msf, np, plt
 
 
 @app.cell
@@ -40,12 +39,12 @@ def _(mo):
         """
         # Multi-Source Flow Map Algorithms
 
-        This notebook is separate from `exploration.py`.
-        It focuses on algorithmic comparison for Project 2:
+        This notebook compares the four current strategies:
 
-        - `raw_directed`: thresholded direct OD baseline
-        - `greedy_spiral_tree`: simplified Greedy Spiral Tree
-        - `enhanced_greedy_spiral_tree`: upgraded spiral-tree heuristic
+        - `raw_directed`
+        - `force_adjusted_curved_od`
+        - `quality_aware_force_adjusted_od`
+        - `quality_aware_polyline_od`
         """
     )
     return
@@ -55,17 +54,6 @@ def _(mo):
 def _(msf):
     provinces, province_flows, pair_summary = msf.load_flow_dataset(period="2024JJ00")
     return pair_summary, province_flows, provinces
-
-
-@app.cell
-def _(mo, pair_summary, province_flows, provinces):
-    mo.md(
-        "## Dataset\n"
-        f"- Provinces: **{len(provinces)}**\n"
-        f"- Directed province flows in 2024: **{len(province_flows)}**\n"
-        f"- Unordered province pairs: **{len(pair_summary)}**"
-    )
-    return
 
 
 @app.cell
@@ -93,127 +81,53 @@ def _(comparison):
 
 @app.cell
 def _(mo, comparison):
-    _best = comparison.iloc[0]
+    best = comparison.iloc[0]
     mo.md(
-        "## Best Current Strategy\n"
-        f"`{_best['strategy']}` currently has the best "
-        f"`coverage_minus_clutter` score with "
-        f"coverage={_best['coverage']:.3f} and "
-        f"clutter={_best['clutter_score']:.0f}."
+        "## Best Current Trade-off\n"
+        f"`{best['strategy']}` currently gives "
+        f"coverage={best['coverage']:.3f}, crossings={best['crossings']:.0f}, "
+        f"and clutter={best['clutter_score']:.0f}."
     )
     return
 
 
 @app.cell
 def _(np, plt, provinces):
-    def _point_key(point):
-        return (round(point.x, 6), round(point.y, 6))
-
-    def _bundle_segments(carriers):
-        bundles = {}
-        terminals = []
+    def plot_strategy_map(ax, carriers, title):
+        provinces.plot(ax=ax, edgecolor="black", facecolor="#f5f5f5", linewidth=0.8)
         for _, row in carriers.iterrows():
-            waypoints = row.get("waypoints")
-            if not isinstance(waypoints, list) or len(waypoints) < 2:
-                continue
-
-            for start, end in zip(waypoints, waypoints[1:], strict=False):
-                key = (_point_key(start), _point_key(end))
-                if key not in bundles:
-                    bundles[key] = {
-                        "start": start,
-                        "end": end,
-                        "flow": 0.0,
-                    }
-                bundles[key]["flow"] += float(row["represented_flow"])
-
-            terminals.append(
-                {
-                    "start": waypoints[-2],
-                    "end": waypoints[-1],
-                    "width_score": float(row["width_score"]),
-                    "alpha_score": float(row["alpha_score"]),
-                    "arrow_score": float(row["arrow_score"]),
-                }
+            coords = np.asarray(row["geometry"].coords)
+            width = 0.8 + 5.2 * float(row["width_score"])
+            alpha = float(row["alpha_score"])
+            ax.plot(
+                coords[:, 0],
+                coords[:, 1],
+                color="steelblue",
+                linewidth=width,
+                alpha=alpha,
+                solid_capstyle="round",
             )
-        return bundles, terminals
-
-    def plot_strategy_map(carriers, title, save_path):
-        _fig, _ax = plt.subplots(figsize=(10, 12))
-        provinces.plot(ax=_ax, edgecolor="black", facecolor="#f5f5f5", linewidth=0.8)
-
-        _can_bundle = (
-            "waypoints" in carriers.columns
-            and carriers["waypoints"].apply(lambda w: isinstance(w, list) and len(w) > 2).any()
-        )
-        if _can_bundle:
-            _bundles, _terminals = _bundle_segments(carriers)
-            _max_bundle_flow = max(bundle["flow"] for bundle in _bundles.values())
-
-            for _bundle in sorted(_bundles.values(), key=lambda item: item["flow"]):
-                _norm = _bundle["flow"] / _max_bundle_flow if _max_bundle_flow else 0.0
-                _width = 0.8 + 6.8 * _norm
-                _alpha = 0.25 + 0.65 * _norm
-                _ax.plot(
-                    [_bundle["start"].x, _bundle["end"].x],
-                    [_bundle["start"].y, _bundle["end"].y],
-                    color="steelblue",
-                    linewidth=_width,
-                    alpha=_alpha,
-                    solid_capstyle="round",
-                )
-
-            for _terminal in _terminals:
-                _width = 0.8 + 4.0 * _terminal["width_score"]
-                _alpha = max(0.45, _terminal["alpha_score"])
-                _ax.annotate(
+            if len(coords) >= 2:
+                start = coords[-2]
+                end = coords[-1]
+                ax.annotate(
                     "",
-                    xy=(_terminal["end"].x, _terminal["end"].y),
-                    xytext=(_terminal["start"].x, _terminal["start"].y),
+                    xy=(end[0], end[1]),
+                    xytext=(start[0], start[1]),
                     arrowprops=dict(
                         arrowstyle="-|>",
                         color="steelblue",
-                        lw=max(0.8, _width * 0.5),
-                        alpha=_alpha,
-                        mutation_scale=8 + 10 * _terminal["arrow_score"],
+                        lw=max(0.8, width * 0.6),
+                        alpha=alpha,
+                        mutation_scale=8 + 10 * float(row["arrow_score"]),
                     ),
                 )
-        else:
-            for _, _row in carriers.iterrows():
-                _coords = np.asarray(_row["geometry"].coords)
-                _width = 0.8 + 5.2 * float(_row["width_score"])
-                _alpha = float(_row["alpha_score"])
 
-                _ax.plot(
-                    _coords[:, 0],
-                    _coords[:, 1],
-                    color="steelblue",
-                    linewidth=_width,
-                    alpha=_alpha,
-                    solid_capstyle="round",
-                )
-
-                if len(_coords) >= 2:
-                    _start = _coords[-2]
-                    _end = _coords[-1]
-                    _ax.annotate(
-                        "",
-                        xy=(_end[0], _end[1]),
-                        xytext=(_start[0], _start[1]),
-                        arrowprops=dict(
-                            arrowstyle="-|>",
-                            color="steelblue",
-                            lw=max(0.8, _width * 0.6),
-                            alpha=_alpha,
-                            mutation_scale=8 + 10 * float(_row["arrow_score"]),
-                        ),
-                    )
-
-        for _, _province in provinces.iterrows():
-            _anchor = _province["anchor"]
-            _ax.annotate(
-                _province["name"],
-                xy=(_anchor.x, _anchor.y),
+        for _, province in provinces.iterrows():
+            anchor = province["anchor"]
+            ax.annotate(
+                province["name"],
+                xy=(anchor.x, anchor.y),
                 ha="center",
                 va="center",
                 fontsize=8,
@@ -221,96 +135,113 @@ def _(np, plt, provinces):
                 bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="gray", alpha=0.9),
             )
 
-        _ax.set_title(title)
-        _ax.set_axis_off()
-        _fig.tight_layout()
-        _fig.savefig(save_path, dpi=150, bbox_inches="tight")
-        return _fig
+        ax.set_title(title)
+        ax.set_axis_off()
 
     return (plot_strategy_map,)
 
 
 @app.cell
-def _(IMG, plot_strategy_map, strategy_results):
-    _result = strategy_results["raw_directed"]
-    _fig = plot_strategy_map(
-        _result.carriers,
-        "Algorithm 1: thresholded direct OD lines",
-        IMG / "07_algorithm1_raw_directed.png",
-    )
-    _fig
-    return
+def _(IMG, plot_strategy_map, plt, strategy_results):
+    titles = {
+        "raw_directed": "Algorithm 1: Raw Directed",
+        "force_adjusted_curved_od": "Algorithm 2: Force-Adjusted Curved OD",
+        "quality_aware_force_adjusted_od": "Algorithm 3: Quality-Aware Greedy OD",
+        "quality_aware_polyline_od": "Algorithm 4: Quality-Aware Polyline OD",
+    }
 
-
-@app.cell
-def _(IMG, plot_strategy_map, strategy_results):
-    _result = strategy_results["greedy_spiral_tree"]
-    _fig = plot_strategy_map(
-        _result.carriers,
-        "Algorithm 2: Greedy Spiral Tree",
-        IMG / "08_algorithm2_greedy_spiral_tree.png",
-    )
-    _fig
-    return
-
-
-@app.cell
-def _(IMG, plot_strategy_map, strategy_results):
-    _result = strategy_results["enhanced_greedy_spiral_tree"]
-    _fig = plot_strategy_map(
-        _result.carriers,
-        "Algorithm 3: Enhanced Greedy Spiral Tree",
-        IMG / "09_algorithm3_enhanced_spiral_tree.png",
-    )
-    _fig
-    return
-
-
-@app.cell
-def _(mo, strategy_results):
-    _lines = []
-    for _name, _result in strategy_results.items():
-        _m = _result.metrics
-        _lines.append(
-            f"- **{_name}**: coverage={_m['coverage']:.3f}, "
-            f"crossings={_m['crossings']:.0f}, "
-            f"intrusions={_m['node_intrusions']:.0f}, "
-            f"mean detour={_m['mean_detour_ratio']:.3f}"
+    for key, title in titles.items():
+        result = strategy_results[key]
+        metrics = result.metrics
+        fig, ax = plt.subplots(figsize=(10, 12))
+        plot_strategy_map(
+            ax,
+            result.carriers,
+            f"{title}\n"
+            f"cov={metrics['coverage']:.3f}, "
+            f"cross={metrics['crossings']:.0f}, "
+            f"detour={metrics['mean_detour_ratio']:.3f}",
         )
+        fig.tight_layout()
+        fig.savefig(IMG / f"{key}.png", dpi=150, bbox_inches="tight")
+        plt.close(fig)
+    return
 
-    mo.md("## Metric Summary\n" + "\n".join(_lines))
+
+@app.cell
+def _(IMG, plot_strategy_map, plt, strategy_results):
+    order = [
+        ("raw_directed", "Algorithm 1: Raw Directed"),
+        ("force_adjusted_curved_od", "Algorithm 2: Force-Adjusted Curved OD"),
+        ("quality_aware_force_adjusted_od", "Algorithm 3: Quality-Aware Greedy OD"),
+        ("quality_aware_polyline_od", "Algorithm 4: Quality-Aware Polyline OD"),
+    ]
+    fig, axes = plt.subplots(2, 2, figsize=(18, 16))
+    axes = axes.ravel()
+    for ax, (key, title) in zip(axes, order, strict=False):
+        metrics = strategy_results[key].metrics
+        plot_strategy_map(
+            ax,
+            strategy_results[key].carriers,
+            f"{title}\n"
+            f"cov={metrics['coverage']:.3f}, "
+            f"cross={metrics['crossings']:.0f}, "
+            f"detour={metrics['mean_detour_ratio']:.3f}",
+        )
+    fig.tight_layout()
+    fig.savefig(IMG / "four_algorithms_comparison.png", dpi=150, bbox_inches="tight")
+    fig
     return
 
 
 @app.cell
 def _(msf, pair_summary, province_flows, provinces):
-    sweep_configs = msf.enhanced_spiral_sweep_configs(period="2024JJ00")
-    parameter_sweep = msf.compare_strategies(
+    force_sweep = msf.compare_strategies(
         provinces,
         province_flows,
         pair_summary,
-        sweep_configs,
+        msf.force_adjusted_sweep_configs(period="2024JJ00", top_k=40),
     )
-    return (parameter_sweep,)
+    return (force_sweep,)
 
 
 @app.cell
-def _(parameter_sweep):
-    parameter_sweep.head(12)
+def _(force_sweep):
+    force_sweep
     return
 
 
 @app.cell
-def _(mo, parameter_sweep):
-    _best = parameter_sweep.iloc[0]
-    mo.md(
-        "## Parameter Sweep\n"
-        f"Best enhanced spiral-tree setting in this sweep: "
-        f"`top_k={int(_best['top_k'])}`, "
-        f"`spiral_turns={_best['spiral_turns']:.2f}` "
-        f"with coverage={_best['coverage']:.3f} and "
-        f"clutter={_best['clutter_score']:.0f}."
+def _(msf, pair_summary, province_flows, provinces):
+    quality_sweep = msf.compare_strategies(
+        provinces,
+        province_flows,
+        pair_summary,
+        msf.quality_aware_sweep_configs(period="2024JJ00"),
     )
+    return (quality_sweep,)
+
+
+@app.cell
+def _(quality_sweep):
+    quality_sweep
+    return
+
+
+@app.cell
+def _(msf, pair_summary, province_flows, provinces):
+    polyline_sweep = msf.compare_strategies(
+        provinces,
+        province_flows,
+        pair_summary,
+        msf.polyline_sweep_configs(period="2024JJ00", top_k=40),
+    )
+    return (polyline_sweep,)
+
+
+@app.cell
+def _(polyline_sweep):
+    polyline_sweep
     return
 
 

@@ -14,10 +14,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+import matplotlib.pyplot as plt
 import geopandas as gpd
 import numpy as np
 import pandas as pd
 from shapely.geometry import LineString, Point
+
+OUT = Path("experiments")
+OUT.mkdir(exist_ok=True)
 
 
 @dataclass(frozen=True)
@@ -53,6 +57,46 @@ class FlowMapResult:
     selected: pd.DataFrame
     carriers: pd.DataFrame
     metrics: dict[str, float]
+
+
+ALL_STRATEGIES = [
+    "raw_directed",
+    "force_adjusted_curved_od",
+    "quality_aware_force_adjusted_od",
+    "quality_aware_polyline_od",
+]
+
+
+def load_province_dataset(period: str = "2024JJ00"):
+    return load_flow_dataset(period=period)
+
+
+def _make_config(
+    strategy: str,
+    top_k: int,
+    force_iterations: int = 5,
+    greedy_candidate_limit: int = 60,
+    polyline_lane_ratio: float = 0.010,
+) -> FlowMapConfig:
+    return FlowMapConfig(
+        strategy=strategy,
+        period="2024JJ00",
+        top_k=top_k,
+        min_flow=0.0,
+        greedy_candidate_limit=greedy_candidate_limit,
+        coverage_weight=1.0,
+        crossing_weight=0.008,
+        intrusion_weight=0.004,
+        detour_weight=0.20,
+        curvature_scale=0.10,
+        force_iterations=force_iterations,
+        selection_force_iterations=0,
+        force_step_scale=0.010,
+        force_proximity_scale=0.028,
+        force_base_pull=0.18,
+        polyline_lane_ratio=polyline_lane_ratio,
+        polyline_proximity_ratio=0.020,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -655,7 +699,6 @@ def build_quality_aware_polyline_carriers(
 
     return _finalize_carriers(pd.DataFrame(chosen))
 
-
 # ---------------------------------------------------------------------------
 # Evaluation
 # ---------------------------------------------------------------------------
@@ -677,7 +720,53 @@ def count_crossings(carriers: pd.DataFrame) -> int:
                 crossings += 1
 
     return crossings
+def _plot_strategy_map(ax, regions, carriers, title: str) -> None:
+    regions.plot(ax=ax, edgecolor="black", facecolor="#f5f5f5", linewidth=0.8)
 
+    for _, row in carriers.iterrows():
+        coords = np.asarray(row["geometry"].coords)
+        width = 0.8 + 5.2 * float(row["width_score"])
+        alpha = float(row["alpha_score"])
+
+        ax.plot(
+            coords[:, 0],
+            coords[:, 1],
+            color="steelblue",
+            linewidth=width,
+            alpha=alpha,
+            solid_capstyle="round",
+        )
+
+        if len(coords) >= 2:
+            start = coords[-2]
+            end = coords[-1]
+            ax.annotate(
+                "",
+                xy=(end[0], end[1]),
+                xytext=(start[0], start[1]),
+                arrowprops=dict(
+                    arrowstyle="-|>",
+                    color="steelblue",
+                    lw=max(0.8, width * 0.6),
+                    alpha=alpha,
+                    mutation_scale=8 + 10 * float(row["arrow_score"]),
+                ),
+            )
+
+    for _, region in regions.iterrows():
+        anchor = region["anchor"]
+        ax.annotate(
+            region["name"],
+            xy=(anchor.x, anchor.y),
+            ha="center",
+            va="center",
+            fontsize=8,
+            fontweight="bold",
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="gray", alpha=0.9),
+        )
+
+    ax.set_title(title)
+    ax.set_axis_off()
 
 def count_node_intrusions(
     carriers: pd.DataFrame,
@@ -1114,3 +1203,121 @@ def polyline_sweep_configs(
         )
         for value in lane_ratios
     ]
+
+def _export_topk_comparison_figure(regions, strategy_results: dict[str, FlowMapResult], top_k: int) -> None:
+    order = [
+        ("raw_directed", "Algorithm 1: Raw Directed"),
+        ("force_adjusted_curved_od", "Algorithm 2: Force-Adjusted Curved OD"),
+        ("quality_aware_force_adjusted_od", "Algorithm 3: Quality-Aware Greedy OD"),
+        ("quality_aware_polyline_od", "Algorithm 4: Quality-Aware Polyline OD"),
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(18, 16))
+    axes = axes.ravel()
+
+    for ax, (key, title) in zip(axes, order, strict=False):
+        result = strategy_results[key]
+        metrics = result.metrics
+        _plot_strategy_map(
+            ax,
+            regions,
+            result.carriers,
+            f"{title}\n"
+            f"top_k={top_k}, "
+            f"cov={metrics['coverage']:.3f}, "
+            f"cross={metrics['crossings']:.0f}, "
+            f"detour={metrics['mean_detour_ratio']:.3f}",
+        )
+
+    fig.tight_layout()
+    fig.savefig(OUT / f"exp2_topk_{top_k}_comparison.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+def _export_single_strategy_topk_panel(regions, results_by_topk: dict[int, FlowMapResult], strategy: str, topks: list[int]) -> None:
+    titles = {
+        "raw_directed": "Algorithm 1: Raw Directed",
+        "force_adjusted_curved_od": "Algorithm 2: Force-Adjusted Curved OD",
+        "quality_aware_force_adjusted_od": "Algorithm 3: Quality-Aware Greedy OD",
+        "quality_aware_polyline_od": "Algorithm 4: Quality-Aware Polyline OD",
+    }
+
+    fig, axes = plt.subplots(1, len(topks), figsize=(6 * len(topks), 6))
+    if len(topks) == 1:
+        axes = [axes]
+
+    for ax, top_k in zip(axes, topks, strict=False):
+        result = results_by_topk[top_k]
+        metrics = result.metrics
+        _plot_strategy_map(
+            ax,
+            regions,
+            result.carriers,
+            f"{titles[strategy]}\n"
+            f"top_k={top_k}, "
+            f"cov={metrics['coverage']:.3f}, "
+            f"cross={metrics['crossings']:.0f}",
+        )
+
+    fig.tight_layout()
+    fig.savefig(OUT / f"exp2_{strategy}_topk_panel.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+TOPFLOW_GROUPS = [20, 40, 60]
+
+TOPFLOW_GROUPS = [20, 40, 60]
+
+
+def main():
+    print("=== Topflow map experiment ===")
+
+    regions, flows, pairs = load_province_dataset()
+    rows = []
+    all_results = {}
+
+    for top_k in TOPFLOW_GROUPS:
+        print(f"  top_k = {top_k}")
+        strategy_results = {}
+
+        for strategy in ALL_STRATEGIES:
+            config = _make_config(strategy, top_k=top_k)
+            result = build_solution(regions, flows, pairs, config)
+            strategy_results[strategy] = result
+
+            row = {
+                "strategy": strategy,
+                "top_k": top_k,
+                "greedy_candidate_limit": config.greedy_candidate_limit,
+                "force_iterations": config.force_iterations,
+                "polyline_lane_ratio": config.polyline_lane_ratio,
+                **result.metrics,
+            }
+            rows.append(row)
+
+            print(
+                f"    {strategy}: "
+                f"coverage={row['coverage']:.3f}, "
+                f"crossings={row['crossings']:.0f}, "
+                f"intrusions={row['node_intrusions']:.0f}"
+            )
+
+        all_results[top_k] = strategy_results
+        _export_topk_comparison_figure(regions, strategy_results, top_k)
+
+    for strategy in ALL_STRATEGIES:
+        results_by_topk = {k: all_results[k][strategy] for k in TOPFLOW_GROUPS}
+        _export_single_strategy_topk_panel(
+            regions,
+            results_by_topk,
+            strategy,
+            TOPFLOW_GROUPS,
+        )
+
+    df = pd.DataFrame(rows)
+    df.to_csv(OUT / "exp_topflow_map_metrics.csv", index=False)
+
+    print(f"Saved metrics to: {OUT / 'exp_topflow_map_metrics.csv'}")
+    print(f"Saved map figures to: {OUT}")
+
+
+if __name__ == "__main__":
+    main()

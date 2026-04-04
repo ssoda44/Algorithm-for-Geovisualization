@@ -139,26 +139,58 @@ def experiment_1_source_ordering():
 # ---------------------------------------------------------------------------
 
 def experiment_2_flow_density():
-    """Test how crossing count scales with top_k across all strategies."""
-    print("=== Experiment 2: Flow Density (top_k) ===")
-    provinces, flows, pairs = load_province_dataset()
+    """Compare the four strategies under different top-k settings and export maps."""
 
-    top_ks = [10, 20, 30, 40, 50, 60]
-
+    print("=== Experiment 2: Flow Density ===")
+    regions, flows, pairs = load_province_dataset()
     rows = []
-    for top_k in top_ks:
+
+    # 保存每个 top_k 下四个算法的完整结果
+    all_results: dict[int, dict[str, msf.FlowMapResult]] = {}
+
+    for top_k in [20, 40, 60]:
+        strategy_results = {}
+        print(f"  top_k={top_k}")
+
         for strategy in ALL_STRATEGIES:
             config = _make_config(strategy, top_k=top_k)
-            row = _run_config(provinces, flows, pairs, config)
+            result = msf.build_solution(regions, flows, pairs, config)
+            strategy_results[strategy] = result
+
+            row = {
+                "strategy": config.strategy,
+                "top_k": config.top_k,
+                "greedy_candidate_limit": config.greedy_candidate_limit,
+                "force_iterations": config.force_iterations,
+                "polyline_lane_ratio": config.polyline_lane_ratio,
+                **result.metrics,
+            }
             rows.append(row)
-            print(f"  top_k={top_k}, {strategy}: crossings={row['crossings']:.0f}, "
-                  f"detour={row['mean_detour_ratio']:.3f}")
+
+            print(
+                f"    {strategy}: "
+                f"coverage={row['coverage']:.3f}, crossings={row['crossings']:.0f}"
+            )
+
+        all_results[top_k] = strategy_results
+
+        # 为每个 top_k 导出一张 2x2 比较图
+        _export_topk_comparison_figure(regions, strategy_results, top_k)
 
     df = pd.DataFrame(rows)
     df.to_csv(OUT / "exp2_flow_density.csv", index=False)
-    print(f"  Saved to {OUT / 'exp2_flow_density.csv'}\n")
-    return df
 
+    # 再导出单算法跨 top_k 的 panel 图
+    for strategy in ALL_STRATEGIES:
+        results_by_topk = {top_k: all_results[top_k][strategy] for top_k in all_results}
+        _export_single_strategy_topk_panel(
+            regions,
+            results_by_topk,
+            strategy,
+            topks=[20, 40, 60],
+        )
+
+    return df
 
 # ---------------------------------------------------------------------------
 # Experiment 3: Geographic granularity
